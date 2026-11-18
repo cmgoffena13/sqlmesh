@@ -1731,7 +1731,13 @@ class DeployabilityIndex(PydanticModel, frozen=True):
                         children_deployable = False
             else:
                 children_deployable = False
-                if not snapshots[node].is_paused:
+                # Dev-only plans never enter the deployable branch, so a paused indirect non-breaking
+                # snapshot with prod intervals would otherwise get an empty __dev table. Point it at prod.
+                if not snapshot.is_paused or (
+                    not snapshot.virtual_environment_mode.is_full
+                    and snapshot.is_indirect_non_breaking
+                    and snapshot.intervals
+                ):
                     representative_shared_version_ids.add(node)
 
             deployability_mapping[node] = this_deployable
