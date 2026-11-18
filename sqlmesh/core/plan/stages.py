@@ -313,7 +313,7 @@ class PlanStagesBuilder:
         if plan.new_snapshots:
             stages.append(CreateSnapshotRecordsStage(snapshots=plan.new_snapshots))
 
-        snapshots_to_create = self._get_snapshots_to_create(plan, snapshots)
+        snapshots_to_create = self._get_snapshots_to_create(plan, snapshots, deployability_index)
         if snapshots_to_create:
             stages.append(
                 PhysicalLayerSchemaCreationStage(
@@ -629,7 +629,10 @@ class PlanStagesBuilder:
         return audit_snapshots
 
     def _get_snapshots_to_create(
-        self, plan: EvaluatablePlan, snapshots: t.Dict[SnapshotId, Snapshot]
+        self,
+        plan: EvaluatablePlan,
+        snapshots: t.Dict[SnapshotId, Snapshot],
+        deployability_index: DeployabilityIndex,
     ) -> t.List[Snapshot]:
         promoted_snapshot_ids = (
             set(plan.environment.promoted_snapshot_ids)
@@ -639,6 +642,12 @@ class PlanStagesBuilder:
 
         def _should_create(s: Snapshot) -> bool:
             if not s.is_model or s.is_symbolic:
+                return False
+            # A representative snapshot that cannot be deployed reads the prod physical table,
+            # so a __dev copy would never be used.
+            if deployability_index.is_representative(s) and not deployability_index.is_deployable(
+                s
+            ):
                 return False
             # Only create tables for snapshots that we're planning to promote or that were selected for backfill
             return (

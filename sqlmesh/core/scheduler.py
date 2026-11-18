@@ -1083,7 +1083,7 @@ def merged_missing_intervals(
     restatements = restatements or {}
     validate_date_range(start, end)
 
-    return compute_interval_params(
+    snapshots_to_intervals = compute_interval_params(
         snapshots,
         start=start or earliest_start_date(snapshots),
         end=end or now_timestamp(),
@@ -1095,6 +1095,16 @@ def merged_missing_intervals(
         ignore_cron=ignore_cron,
         end_bounded=end_bounded,
     )
+    # Representative snapshots that can never be deployed read the prod physical table.
+    # Drop them here so plan and run do not backfill a table no view reads.
+    deployability_index = deployability_index or DeployabilityIndex.all_deployable()
+    return {
+        s: intervals
+        for s, intervals in snapshots_to_intervals.items()
+        if not (
+            deployability_index.is_representative(s) and not deployability_index.is_deployable(s)
+        )
+    }
 
 
 def compute_interval_params(
